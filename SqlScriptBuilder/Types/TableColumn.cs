@@ -4,10 +4,11 @@ using System.Linq.Expressions;
 
 namespace SqlScriptBuilder
 {
+
   /// <summary>
   /// Represents a column in a table variable.
   /// </summary>
-  public sealed class TableColumn
+  public sealed class TableColumn : Column
   {
     /// <summary>
     /// Initializes a new instance of the <see cref="TableColumn"/> class.
@@ -16,11 +17,13 @@ namespace SqlScriptBuilder
     /// <param name="dataType">The sql data type of the column.</param>
     /// <param name="allowNull">Should the column allow nulls.</param>
     /// <param name="isPrimaryKey">Should the column act as a primary key.</param>
-    private TableColumn(string name, SqlDbType dataType, bool allowNull, bool isPrimaryKey)
+    private TableColumn(
+      ColumnName name,
+      SqlDbType dataType,
+      bool allowNull,
+      bool isPrimaryKey)
+      : base(name, dataType)
     {
-      ScriptBuilderHelper.ValidateName(name);
-      Name = name;
-      DataType = dataType;
       AllowNull = allowNull;
       IsPrimaryKey = isPrimaryKey;
     }
@@ -33,7 +36,11 @@ namespace SqlScriptBuilder
     /// <param name="allowNull">Should the column allow nulls.</param>
     /// <param name="isPrimaryKey">Should the column act as a primary key.</param>
     /// <returns>Returns an instance of the <see cref="TableColumn"/> initialized with the specified parameters.</returns>
-    public static TableColumn Create(string name, SqlDbType dataType, bool allowNull = false, bool isPrimaryKey = false)
+    public static TableColumn Create(
+      ColumnName name,
+      SqlDbType dataType,
+      bool allowNull = false,
+      bool isPrimaryKey = false)
     {
       return new TableColumn(name, dataType, allowNull, isPrimaryKey);
     }
@@ -48,33 +55,19 @@ namespace SqlScriptBuilder
     /// <param name="allowNull">Should the column allow nulls. If not defined then type will be inferred from <typeparamref name="TColumnDataType"/>.</param>
     /// <param name="isPrimaryKey">Should the column act as a primary key.</param>
     /// <returns>Returns an instance of the <see cref="TableColumn"/> initialized with the specified parameters.</returns>
-    public static TableColumn Create<TObjectTemplate, TColumnDataType>(Expression<Func<TObjectTemplate, TColumnDataType>> columnSelector, SqlDbType? dataType = null, bool? allowNull = null, bool isPrimaryKey = false)
+    public static TableColumn Create<TObjectTemplate, TColumnDataType>(
+      Expression<Func<TObjectTemplate, TColumnDataType>> columnSelector,
+      SqlDbType? dataType = null,
+      bool? allowNull = null,
+      bool isPrimaryKey = false)
       where TObjectTemplate : class
     {
-      var columnName = columnSelector.GetMemberName();
+      ColumnName columnName = (ColumnName)columnSelector.GetMemberName();
       Type propertyType = typeof(TColumnDataType);
       var columnDataType = dataType ?? ClrTypeToSqlDbTypeMapper.GetSqlDbTypeFromClrType(propertyType);
-      var columnNullable = allowNull ?? IsTypeNullable(propertyType);
+      var columnNullable = allowNull ?? propertyType.IsTypeNullable();
       return Create(columnName, columnDataType, columnNullable, isPrimaryKey);
-
-      bool IsTypeNullable(Type clrType)
-      {
-        if (!clrType.IsGenericType || clrType.GetGenericTypeDefinition() != typeof(Nullable<>))
-          return false;
-
-        return true;
-      }
     }
-
-    /// <summary>
-    /// The name of the column.
-    /// </summary>
-    public string Name { get; }
-
-    /// <summary>
-    /// The sql data type of the column.
-    /// </summary>
-    public SqlDbType DataType { get; }
 
     /// <summary>
     /// Does the column allow nulls.

@@ -33,7 +33,7 @@ namespace SqlScriptBuilder
     /// <returns>The <see cref="ScriptBuilder"/> that owns this section.</returns>
     public virtual ScriptBuilder EndSection()
     {
-      // This method doesn't really do anything yet but is added (and required) to allow code to be added in the future without breaking existing code that uses this library.
+      Owner.AddSectionBuilder(this);
       IsFinalized = true;
       return Owner;
     }

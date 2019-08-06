@@ -2,34 +2,39 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace SqlScriptBuilder
 {
+
   /// <summary>
   /// Class used to build a table variable script section.
   /// </summary>
-  public class TableVariableBuilder : SectionBuilderBase
+  public class TableVariableBuilder : VariableSectionBuilder
   {
-    private readonly IDictionary<string, TableColumn> _columns;
+    private readonly Dictionary<string, TableColumn> _columns;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TableVariableBuilder"/> class.
     /// </summary>
     /// <param name="owner">The <see cref="ScriptBuilder"/> that owns this <see cref="TableVariableBuilder"/>.</param>
     /// <param name="name">The name that the table veriable will get in the script.</param>
-    internal TableVariableBuilder(ScriptBuilder owner, string name)
-      : base(owner)
+    internal TableVariableBuilder(ScriptBuilder owner, VariableName name)
+      : base(owner, name)
     {
-      ScriptBuilderHelper.ValidateName(name);
-
-      Name = name;
       _columns = new Dictionary<string, TableColumn>();
     }
 
     /// <summary>
-    /// Name of the table variable without @ prefix.
+    /// The columns that have been added to the section.
     /// </summary>
-    public string Name { get; }
+    protected IReadOnlyDictionary<string, TableColumn> Columns
+    {
+      get
+      {
+        return _columns;
+      }
+    }
 
     /// <summary>
     /// Adds a column to the table variable.
@@ -41,9 +46,7 @@ namespace SqlScriptBuilder
     /// <returns>Returns the <see cref="TableVariableBuilder"/> that the column was added to.</returns>
     public TableVariableBuilder AddColumn(string name, SqlDbType dataType, bool allowNull = false, bool isPrimaryKey = false)
     {
-      if (IsFinalized) throw new ScriptBuilderException("Cannot add new columns to the table once it has been finalized!");
-
-      var column = TableColumn.Create(name, dataType, allowNull, isPrimaryKey);
+      var column = TableColumn.Create((ColumnName)name, dataType, allowNull, isPrimaryKey);
       return AddColumn(column);
     }
 
@@ -54,13 +57,23 @@ namespace SqlScriptBuilder
     /// <returns>Returns the <see cref="TableVariableBuilder"/> that the column was added to.</returns>
     public TableVariableBuilder AddColumn(TableColumn column)
     {
-      if (IsFinalized) throw new ScriptBuilderException("Cannot add new columns to the table once it has been finalized!");
+      if (IsFinalized) throw new ScriptBuilderException("Cannot add new columns to the section once it has been finalized!");
 
       if (_columns.ContainsKey(column.Name))
         throw new ScriptBuilderException($"Column name '{column.Name}' already exist!");
 
       _columns.Add(column.Name, column);
       return this;
+    }
+
+    /// <summary>
+    /// Checks if a particular column name have already been added to the table.
+    /// </summary>
+    /// <param name="name">Name of the column to check for.</param>
+    /// <returns>Returns true if the column already exist in the table; Otherwise, returns false.</returns>
+    public bool ColumnExists(string name)
+    {
+      return _columns.ContainsKey(name);
     }
 
     /// <summary>
@@ -83,11 +96,11 @@ namespace SqlScriptBuilder
     where TObjectTemplate : class
   {
     /// <summary>
-    /// Initializes a new instance of the <see cref="TableVariableBuilder{TSchemaEntity}"/> class.
+    /// Initializes a new instance of the <see cref="TableVariableBuilder{TObjectTemplate}"/> class.
     /// </summary>
-    /// <param name="owner">The <see cref="ScriptBuilder"/> that owns this <see cref="TableVariableBuilder{TSchemaEntity}"/>.</param>
+    /// <param name="owner">The <see cref="ScriptBuilder"/> that owns this <see cref="TableVariableBuilder{TObjectTemplate}"/>.</param>
     /// <param name="name">The name that the table veriable will get in the script.</param>
-    internal TableVariableBuilder(ScriptBuilder owner, string name)
+    internal TableVariableBuilder(ScriptBuilder owner, VariableName name)
       : base(owner, name)
     {
     }
@@ -100,21 +113,51 @@ namespace SqlScriptBuilder
     /// <param name="dataType">The sql data type of the column. If not defined then type will be inferred from <typeparamref name="TColumnDataType"/>.</param>
     /// <param name="allowNull">Should the column allow nulls. If not defined then type will be inferred from <typeparamref name="TColumnDataType"/>.</param>
     /// <param name="isPrimaryKey">Should the column act as a primary key.</param>
-    /// <returns>Returns the <see cref="TableVariableBuilder"/> that the column was added to.</returns>
-    public TableVariableBuilder AddColumn<TColumnDataType>(Expression<Func<TObjectTemplate, TColumnDataType>> columnSelector, SqlDbType? dataType = null, bool? allowNull = null, bool isPrimaryKey = false)
+    /// <returns>Returns the <see cref="TableVariableBuilder{TObjectTemplate}"/> that the column was added to.</returns>
+    public TableVariableBuilder<TObjectTemplate> AddColumn<TColumnDataType>(
+      Expression<Func<TObjectTemplate, TColumnDataType>> columnSelector,
+      SqlDbType? dataType = null,
+      bool? allowNull = null,
+      bool isPrimaryKey = false)
     {
       var column = TableColumn.Create(columnSelector, dataType, allowNull, isPrimaryKey);
-      return AddColumn(column);
+      AddColumn(column);
+      return this;
     }
 
     /// <summary>
-    /// Finalizes this section of the script and creates an insert data builder with the <typeparamref name="TObjectTemplate"/> as it's template and the table name of this instance.
+    /// Reflects the public properties on <typeparamref name="TObjectTemplate"/> and creates columns for each property.
+    /// If a column already exist with a particular name then it is skipped.
     /// </summary>
-    /// <returns>Returns an instance of <see cref="InsertDataBuilder{TSchemaEntity}"/> used to insert data into the table variable.</returns>
+    /// <param name="columnFactory">A factory used to create a <see cref="TableColumn"/> instance based on a <see cref="PropertyInfo"/> instance.</param>
+    /// <returns>Returns the <see cref="TableVariableBuilder{TObjectTemplate}"/> that the column was added to.</returns>
+    public TableVariableBuilder<TObjectTemplate> ReflectColumns(Func<PropertyInfo, TableColumn> columnFactory = null)
+    {
+      var tableColumnFactory = columnFactory ?? new Func<PropertyInfo, TableColumn>(p =>
+        TableColumn.Create((ColumnName)p.Name, ClrTypeToSqlDbTypeMapper.GetSqlDbTypeFromClrType(p.PropertyType), p.PropertyType.IsTypeNullable()));
+      var properties = typeof(TObjectTemplate).GetProperties();
+      foreach (var property in properties)
+      {
+        var column = tableColumnFactory(property);
+        if (!ColumnExists(column.Name))
+          AddColumn(column);
+      }
+
+      return this;
+    }
+
+    /// <summary>
+    /// Finalizes this section of the script and creates an <see cref="InsertDataBuilder{TObjectTemplate}"/> with the <typeparamref name="TObjectTemplate"/> as it's template and the table name of this instance.
+    /// </summary>
+    /// <returns>Returns an instance of <see cref="InsertDataBuilder{TObjectTemplate}"/> used to insert data into the table variable.</returns>
     public new InsertDataBuilder<TObjectTemplate> InsertData()
     {
       var owner = EndSection();
       var insertDataSection = owner.InsertData<TObjectTemplate>(Name);
+
+      foreach (var column in Columns)
+        insertDataSection.AddColumn(column.Value);
+
       return insertDataSection;
     }
   }
