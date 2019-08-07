@@ -6,7 +6,7 @@ namespace SqlScriptBuilder
   /// <summary>
   /// Builder class used to create sql scripts in a fluent way.
   /// </summary>
-  public sealed class ScriptBuilder
+  public sealed class ScriptBuilder : IOwner
   {
     private readonly Queue _sectionBuilders;
     /// <summary>
@@ -35,10 +35,10 @@ namespace SqlScriptBuilder
     }
 
     /// <summary>
-    /// Adds a section builder to the section builder queue.
+    /// Adds a section to the section queue.
     /// </summary>
-    /// <param name="section">Section builder to add.</param>
-    internal void AddSectionBuilder(SectionBuilderBase section)
+    /// <param name="section">Section to add.</param>
+    void IOwner.AddSection(SectionBuilderBase section)
     {
       if (section is VariableSectionBuilder variableSectionBuilder)
         EnsureVariableName(variableSectionBuilder.Name);
@@ -78,14 +78,19 @@ namespace SqlScriptBuilder
     }
 
     /// <summary>
-    /// Creates an insert statement with static values or the result of a select statement.
+    /// Creates one or more insert statements against a table or table variable.
     /// Does not actually add the section to the builder. Call <see cref="SectionBuilderBase.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
     /// </summary>
-    /// <param name="destinationTable">The name of the table to insert data into.</param>
+    /// <param name="destinationTable">The name of the table or table variable to insert data into.</param>
     /// <returns>Returns a <see cref="InsertDataBuilder"/> instance used to setup the statement.</returns>
     public InsertDataBuilder InsertData(string destinationTable)
     {
-      var section = new InsertDataBuilder(this, destinationTable);
+      InsertDataBuilder section;
+      if (destinationTable.StartsWith("@"))
+        section = new InsertDataBuilder(this, (VariableName)destinationTable);
+      else
+        section = new InsertDataBuilder(this, (TableName)destinationTable);
+
       return section;
     }
 
@@ -101,7 +106,12 @@ namespace SqlScriptBuilder
       if (string.IsNullOrWhiteSpace(tableName))
         tableName = typeof(TObjectTemplate).Name;
 
-      var section = new InsertDataBuilder<TObjectTemplate>(this, tableName);
+      InsertDataBuilder<TObjectTemplate> section;
+      if (tableName.StartsWith("@"))
+        section = new InsertDataBuilder<TObjectTemplate>(this, (VariableName)tableName);
+      else
+        section = new InsertDataBuilder<TObjectTemplate>(this, (TableName)tableName);
+
       return section;
     }
   }

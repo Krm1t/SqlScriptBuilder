@@ -3,24 +3,24 @@
 namespace SqlScriptBuilder
 {
   /// <summary>
-  /// Defines the name of a column and the rules around it.
+  /// Defines the name of a table and the rules around it.
   /// </summary>
-  public struct ColumnName
+  public struct TableName
   {
     private string _name;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ColumnName"/> structure with a specified name.
+    /// Initializes a new instance of the <see cref="TableName"/> structure with a specified name.
     /// </summary>
     /// <param name="name">Name to initialize with.</param>
-    public ColumnName(string name)
+    public TableName(string name)
     {
       ValidateName(name);
       _name = name;
     }
 
     /// <summary>
-    /// Name of the column.
+    /// Name of the table.
     /// </summary>
     public string Name
     {
@@ -36,7 +36,7 @@ namespace SqlScriptBuilder
     }
 
     /// <summary>
-    /// Validates that a given column name is valid.
+    /// Validates that a given table name is valid.
     /// </summary>
     /// <param name="name">The name to validate.
     /// Must not be empty.
@@ -50,12 +50,12 @@ namespace SqlScriptBuilder
         throw new ScriptBuilderException($"Column names can only contain letters, numbers and, underscores!");
     }
 
-    public static implicit operator string(ColumnName variableName) => variableName.Name;
+    public static implicit operator string(TableName variableName) => variableName.Name;
 
-    public static explicit operator ColumnName(string name) => new ColumnName(name);
+    public static explicit operator TableName(string name) => new TableName(name);
 
     /// <summary>
-    /// Returns the name of the column.
+    /// Returns the name of the table.
     /// </summary>
     /// <returns></returns>
     public override string ToString()

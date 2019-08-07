@@ -3,7 +3,7 @@
   /// <summary>
   /// Section builder for creating variables.
   /// </summary>
-  public abstract class VariableSectionBuilder : SectionBuilderBase
+  public abstract class VariableSectionBuilder : SectionBuilderBase<ScriptBuilder>
   {
     /// <summary>
     /// Initializes a new instance of the <see cref="VariableSectionBuilder"/> class.

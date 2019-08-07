@@ -1,19 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace SqlScriptBuilder
 {
-
   /// <summary>
   /// Class used to build a table variable script section.
   /// </summary>
-  public class TableVariableBuilder : VariableSectionBuilder
+  public class TableVariableBuilder : TableVariableBuilderBase
   {
-    private readonly Dictionary<string, TableColumn> _columns;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="TableVariableBuilder"/> class.
     /// </summary>
@@ -22,18 +18,6 @@ namespace SqlScriptBuilder
     internal TableVariableBuilder(ScriptBuilder owner, VariableName name)
       : base(owner, name)
     {
-      _columns = new Dictionary<string, TableColumn>();
-    }
-
-    /// <summary>
-    /// The columns that have been added to the section.
-    /// </summary>
-    protected IReadOnlyDictionary<string, TableColumn> Columns
-    {
-      get
-      {
-        return _columns;
-      }
     }
 
     /// <summary>
@@ -57,23 +41,8 @@ namespace SqlScriptBuilder
     /// <returns>Returns the <see cref="TableVariableBuilder"/> that the column was added to.</returns>
     public TableVariableBuilder AddColumn(TableColumn column)
     {
-      if (IsFinalized) throw new ScriptBuilderException("Cannot add new columns to the section once it has been finalized!");
-
-      if (_columns.ContainsKey(column.Name))
-        throw new ScriptBuilderException($"Column name '{column.Name}' already exist!");
-
-      _columns.Add(column.Name, column);
+      AddColumnInternal(column);
       return this;
-    }
-
-    /// <summary>
-    /// Checks if a particular column name have already been added to the table.
-    /// </summary>
-    /// <param name="name">Name of the column to check for.</param>
-    /// <returns>Returns true if the column already exist in the table; Otherwise, returns false.</returns>
-    public bool ColumnExists(string name)
-    {
-      return _columns.ContainsKey(name);
     }
 
     /// <summary>
@@ -88,11 +57,15 @@ namespace SqlScriptBuilder
     }
   }
 
+  // *******************************************               **************************************************
+  // *******************************************Generic version**************************************************
+  // *******************************************               **************************************************
+
   /// <summary>
   /// Class used to build a table variable script section using a generic type as a template.
   /// </summary>
   /// <typeparam name="TObjectTemplate"></typeparam>
-  public class TableVariableBuilder<TObjectTemplate> : TableVariableBuilder
+  public class TableVariableBuilder<TObjectTemplate> : TableVariableBuilderBase
     where TObjectTemplate : class
   {
     /// <summary>
@@ -121,7 +94,7 @@ namespace SqlScriptBuilder
       bool isPrimaryKey = false)
     {
       var column = TableColumn.Create(columnSelector, dataType, allowNull, isPrimaryKey);
-      AddColumn(column);
+      AddColumnInternal(column);
       return this;
     }
 
@@ -131,7 +104,8 @@ namespace SqlScriptBuilder
     /// </summary>
     /// <param name="columnFactory">A factory used to create a <see cref="TableColumn"/> instance based on a <see cref="PropertyInfo"/> instance.</param>
     /// <returns>Returns the <see cref="TableVariableBuilder{TObjectTemplate}"/> that the column was added to.</returns>
-    public TableVariableBuilder<TObjectTemplate> ReflectColumns(Func<PropertyInfo, TableColumn> columnFactory = null)
+    public TableVariableBuilder<TObjectTemplate> GenerateColumns(
+      Func<PropertyInfo, TableColumn> columnFactory = null)
     {
       var tableColumnFactory = columnFactory ?? new Func<PropertyInfo, TableColumn>(p =>
         TableColumn.Create((ColumnName)p.Name, ClrTypeToSqlDbTypeMapper.GetSqlDbTypeFromClrType(p.PropertyType), p.PropertyType.IsTypeNullable()));
@@ -140,7 +114,7 @@ namespace SqlScriptBuilder
       {
         var column = tableColumnFactory(property);
         if (!ColumnExists(column.Name))
-          AddColumn(column);
+          AddColumnInternal(column);
       }
 
       return this;
@@ -150,7 +124,7 @@ namespace SqlScriptBuilder
     /// Finalizes this section of the script and creates an <see cref="InsertDataBuilder{TObjectTemplate}"/> with the <typeparamref name="TObjectTemplate"/> as it's template and the table name of this instance.
     /// </summary>
     /// <returns>Returns an instance of <see cref="InsertDataBuilder{TObjectTemplate}"/> used to insert data into the table variable.</returns>
-    public new InsertDataBuilder<TObjectTemplate> InsertData()
+    public InsertDataBuilder<TObjectTemplate> InsertData()
     {
       var owner = EndSection();
       var insertDataSection = owner.InsertData<TObjectTemplate>(Name);
