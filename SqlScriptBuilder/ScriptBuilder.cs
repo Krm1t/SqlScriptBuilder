@@ -1,5 +1,6 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 namespace SqlScriptBuilder
 {
@@ -8,7 +9,9 @@ namespace SqlScriptBuilder
   /// </summary>
   public sealed class ScriptBuilder : IOwner
   {
-    private readonly Queue _sectionBuilders;
+    private readonly IScriptGenerator _scriptGenerator;
+    private readonly Queue<SectionBuilder> _sections;
+
     /// <summary>
     /// Contains already added variable names.
     /// Variables must be unique across the entire script.
@@ -20,7 +23,8 @@ namespace SqlScriptBuilder
     /// </summary>
     public ScriptBuilder()
     {
-      _sectionBuilders = new Queue();
+      _scriptGenerator = new MSSqlScriptGenerator();
+      _sections = new Queue<SectionBuilder>();
       _registeredVariableNames = new HashSet<VariableName>();
     }
 
@@ -38,17 +42,17 @@ namespace SqlScriptBuilder
     /// Adds a section to the section queue.
     /// </summary>
     /// <param name="section">Section to add.</param>
-    void IOwner.AddSection(SectionBuilderBase section)
+    void IOwner.AddSection(SectionBuilder section)
     {
       if (section is VariableSectionBuilder variableSectionBuilder)
         EnsureVariableName(variableSectionBuilder.Name);
 
-      _sectionBuilders.Enqueue(section);
+      _sections.Enqueue(section);
     }
 
     /// <summary>
     /// Creates a table variable with columns and optional initial data.
-    /// Does not actually add the section to the builder. Call <see cref="SectionBuilderBase.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
+    /// Does not actually add the section to the builder. Call <see cref="SectionBuilder.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
     /// </summary>
     /// <param name="name">Name of the table variable.
     /// Must be only letters and numbers.</param>
@@ -61,7 +65,7 @@ namespace SqlScriptBuilder
 
     /// <summary>
     /// Creates a table variable with columns and optional initial data.
-    /// Does not actually add the section to the builder. Call <see cref="SectionBuilderBase.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
+    /// Does not actually add the section to the builder. Call <see cref="SectionBuilder.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
     /// </summary>
     /// <typeparam name="TObjectTemplate">An object type used to define the table variable with.</typeparam>
     /// <param name="name">Name of the table variable. If not defined the name of the type in <typeparamref name="TObjectTemplate"/> is used by default.</param>
@@ -79,40 +83,53 @@ namespace SqlScriptBuilder
 
     /// <summary>
     /// Creates one or more insert statements against a table or table variable.
-    /// Does not actually add the section to the builder. Call <see cref="SectionBuilderBase.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
+    /// Does not actually add the section to the builder. Call <see cref="SectionBuilder.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
     /// </summary>
     /// <param name="destinationTable">The name of the table or table variable to insert data into.</param>
     /// <returns>Returns a <see cref="InsertDataBuilder"/> instance used to setup the statement.</returns>
-    public InsertDataBuilder InsertData(string destinationTable)
+    public DefineInsertColumnsBuilder InsertData(string destinationTable)
     {
-      InsertDataBuilder section;
+      DefineInsertColumnsBuilder section;
       if (destinationTable.StartsWith("@"))
-        section = new InsertDataBuilder(this, (VariableName)destinationTable);
+        section = new DefineInsertColumnsBuilder(this, (VariableName)destinationTable);
       else
-        section = new InsertDataBuilder(this, (TableName)destinationTable);
+        section = new DefineInsertColumnsBuilder(this, (TableName)destinationTable);
 
       return section;
     }
 
     /// <summary>
     /// Creates an insert statement with static values or the result of a select statement.
-    /// Does not actually add the section to the builder. Call <see cref="SectionBuilderBase.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
+    /// Does not actually add the section to the builder. Call <see cref="SectionBuilder.EndSection"/> to add it to the <see cref="ScriptBuilder"/>.
     /// </summary>
     /// <param name="destinationTable">The name of the table to insert data into. If not defined the name of the type in <typeparamref name="TObjectTemplate"/> is used by default.</param>
     /// <returns>Returns a <see cref="InsertDataBuilder{TObjectTemplate}"/> instance used to setup the statement.</returns>
-    public InsertDataBuilder<TObjectTemplate> InsertData<TObjectTemplate>(string destinationTable = "")
+    public DefineInsertColumnsBuilder<TObjectTemplate> InsertData<TObjectTemplate>(string destinationTable = "")
     {
       var tableName = destinationTable;
       if (string.IsNullOrWhiteSpace(tableName))
         tableName = typeof(TObjectTemplate).Name;
 
-      InsertDataBuilder<TObjectTemplate> section;
+      DefineInsertColumnsBuilder<TObjectTemplate> section;
       if (tableName.StartsWith("@"))
-        section = new InsertDataBuilder<TObjectTemplate>(this, (VariableName)tableName);
+        section = new DefineInsertColumnsBuilder<TObjectTemplate>(this, (VariableName)tableName);
       else
-        section = new InsertDataBuilder<TObjectTemplate>(this, (TableName)tableName);
+        section = new DefineInsertColumnsBuilder<TObjectTemplate>(this, (TableName)tableName);
 
       return section;
+    }
+
+    public override string ToString()
+    {
+      var tempQueue = new Queue<SectionBuilder>(_sections);
+      var stringBuilder = new StringBuilder();
+      while (tempQueue.Any())
+      {
+        var nextSection = tempQueue.Dequeue();
+        stringBuilder.AppendLine(_scriptGenerator.GenerateSection(nextSection));
+      }
+
+      return stringBuilder.ToString();
     }
   }
 }

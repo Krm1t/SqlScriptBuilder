@@ -2,21 +2,15 @@
 
 namespace SqlScriptBuilder
 {
-  public interface IOwner
-  {
-    void AddSection(SectionBuilderBase section);
-  }
-
   /// <summary>
   /// Contains common logic for creating script sections. This class is abstract.
   /// </summary>
-  public abstract class SectionBuilderBase
+  public abstract class SectionBuilder
   {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SectionBuilderBase{TOwner}"/> class.
+    /// Initializes a new instance of the <see cref="SectionBuilder"/> class.
     /// </summary>
-    /// <param name="owner">The instance that owns this section builder.</param>
-    public SectionBuilderBase()
+    public SectionBuilder()
     {
       IsFinalized = false;
     }
@@ -38,14 +32,14 @@ namespace SqlScriptBuilder
   /// <summary>
   /// Contains common logic for creating script sections. This class is abstract.
   /// </summary>
-  public abstract class SectionBuilderBase<TOwner> : SectionBuilderBase
+  public abstract class OwnedSectionBuilder<TOwner> : SectionBuilder
     where TOwner : class, IOwner
   {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SectionBuilderBase{TOwner}"/> class.
+    /// Initializes a new instance of the <see cref="OwnedSectionBuilder{TOwner}"/> class.
     /// </summary>
     /// <param name="owner">The instance that owns this section builder.</param>
-    public SectionBuilderBase(TOwner owner)
+    public OwnedSectionBuilder(TOwner owner)
       : base()
     {
       Owner = owner ?? throw new ArgumentNullException(nameof(owner));

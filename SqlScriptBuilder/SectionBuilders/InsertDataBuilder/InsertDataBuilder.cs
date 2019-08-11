@@ -11,7 +11,7 @@ namespace SqlScriptBuilder
   * I begge scenarier kommer man tilbage til en speciel instans så man kan tilføje flere inserts til den samme tabel uden at skulle definere kolonner igen.
   */
 
-  public class InsertDataBuilder : SectionBuilderBase<ScriptBuilder>, IOwner
+  public class InsertDataBuilder : OwnedSectionBuilder<ScriptBuilder>, IOwner
   {
     private readonly Dictionary<string, Column> _columns;
     private DataBuilder _defineData;
@@ -72,7 +72,7 @@ namespace SqlScriptBuilder
     }
 
     /// <summary>
-    /// Checks if a particular column name have already been added to the table.
+    /// Checks if the specified column name have already been added to the table.
     /// </summary>
     /// <param name="name">Name of the column to check for.</param>
     /// <returns>Returns true if the column already exist in the table; Otherwise, returns false.</returns>
@@ -81,9 +81,26 @@ namespace SqlScriptBuilder
       return _columns.ContainsKey(name);
     }
 
-    void IOwner.AddSection(SectionBuilderBase section)
+    void IOwner.AddSection(SectionBuilder section)
     {
       throw new System.NotImplementedException();
+    }
+
+    /// <summary>
+    /// Adds a predefined column that is going to have a value defined in the insert.
+    /// </summary>
+    /// <param name="column">The column to add.</param>
+    /// <returns>Returns the <see cref="InsertDataBuilder"/> that the column was added to.</returns>
+    protected void AddColumnInternal(Column column)
+    {
+      if (IsFinalized)
+        throw new ScriptBuilderException("Cannot add new columns to the section once it has been finalized!");
+      if (IsDataBuilderCreated())
+        throw new ScriptBuilderException("Cannot add new columns to the section once data population has begun!");
+      if (_columns.ContainsKey(column.Name))
+        throw new ScriptBuilderException($"Column name '{column.Name}' already exist!");
+
+      _columns.Add(column.Name, column);
     }
   }
 
@@ -93,7 +110,6 @@ namespace SqlScriptBuilder
 
   public class InsertDataBuilder<TObjectTemplate> : InsertDataBuilder
   {
-    // TODO: Fix
     internal InsertDataBuilder(
       ScriptBuilder owner,
       string destinationTable)

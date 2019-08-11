@@ -1,4 +1,8 @@
-﻿using System;
+﻿/*
+ * 1. Some columns like varchar require extra information when defining them. Ensure that this is possible.
+ *    One way would be to change AddColumn to return a new object (ColumnCreator) that contains methods for creating the different column types.
+ */
+using System;
 using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -52,8 +56,11 @@ namespace SqlScriptBuilder
     public InsertDataBuilder InsertData()
     {
       var owner = EndSection();
-      var insertDataSection = owner.InsertData(Name);
-      return insertDataSection;
+      var insertDataBuilder = owner.InsertData(Name);
+      foreach (var column in Columns)
+        insertDataBuilder.AddColumn(column.Value);
+
+      return insertDataBuilder;
     }
   }
 
